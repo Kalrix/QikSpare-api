@@ -1,12 +1,12 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List, Literal, Union
 from datetime import datetime
+from typing import Optional, List, Literal, Union
+from pydantic import BaseModel, EmailStr, Field
 
 
-# -------------------- COMMON SCHEMAS --------------------
+# ----------- Shared Sub-Models -----------
 
 class Location(BaseModel):
-    address_line: Optional[str] = None
+    addressLine: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
     pincode: Optional[str] = None
@@ -14,72 +14,153 @@ class Location(BaseModel):
     lng: Optional[float] = None
 
 
-class BankDetails(BaseModel):
-    account_number: Optional[str] = None
-    ifsc_code: Optional[str] = None
-    bank_name: Optional[str] = None
-    beneficiary_name: Optional[str] = None
-    upi_id: Optional[str] = None
-
-
-class KYC(BaseModel):
-    aadhaar: Optional[str] = None
-    pan: Optional[str] = None
-    gstin: Optional[str] = None
+class KYCDetails(BaseModel):
     driving_license: Optional[str] = None
-    rc_number: Optional[str] = None
+    rc_book: Optional[str] = None
     fitness_certificate: Optional[str] = None
-    documents: List[dict] = []  # Can be {"type": "pan", "url": "..."}
+    insurance: Optional[str] = None
+    documents: List[str] = []
 
-# -------------------- BASE USER --------------------
+
+# ----------- Base User Model -----------
 
 class BaseUser(BaseModel):
     full_name: str
     phone: str
+    role: Literal["admin", "vendor", "garage", "delivery"]
+
     email: Optional[EmailStr] = None
-    role: Literal["admin", "garage", "vendor", "delivery"]
-    pin: Optional[str] = None  # 4-digit PIN for future login
+    pin: Optional[str] = None
+
     referral_code: Optional[str] = None
     referred_by: Optional[str] = None
     referral_count: int = 0
     referral_users: List[str] = []
+
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-# -------------------- ROLE-SPECIFIC FIELDS --------------------
 
-class GarageProfile(BaseModel):
+# ----------- Role Specific Models -----------
+
+class AdminUser(BaseUser):
+    pass
+
+
+class VendorUser(BaseUser):
+    business_name: Optional[str] = None
+    business_type: Optional[str] = None
+    gstin: Optional[str] = None
+    pan_number: Optional[str] = None
+    distributor_size: Optional[str] = None
+
+    brands_carried: List[str] = []
+    category_focus: List[str] = []
+
+    kyc_status: Optional[str] = "optional"
+    documents: List[str] = []
+
+    location: Optional[Location] = None
+    addresses: List[Location] = []
+
+
+class GarageUser(BaseUser):
     garage_name: Optional[str] = None
     garage_size: Optional[str] = None
+
     brands_served: List[str] = []
     vehicle_types: List[str] = []
     category_focus: List[str] = []
-    location: Optional[Location] = None
-    kyc: Optional[KYC] = None
 
-class VendorProfile(BaseModel):
-    business_name: Optional[str] = None
-    business_type: Optional[str] = None
-    distributor_size: Optional[str] = None
-    brands_carried: List[str] = []
-    category_focus: List[str] = []
-    location: Optional[Location] = None
-    kyc: Optional[KYC] = None
-    bank_details: Optional[BankDetails] = None
+    gstin: Optional[str] = None
+    pan_number: Optional[str] = None
 
-class DeliveryProfile(BaseModel):
+    kyc_status: Optional[str] = "optional"
+    documents: List[str] = []
+
+    location: Optional[Location] = None
+    addresses: List[Location] = []
+
+
+class DeliveryUser(BaseUser):
     vehicle_type: Optional[str] = None
     vehicle_number: Optional[str] = None
     warehouse_assigned: Optional[str] = None
+
+    kyc_details: Optional[KYCDetails] = None
     location: Optional[Location] = None
-    kyc: Optional[KYC] = None
 
-# -------------------- COMBINED USER SCHEMA --------------------
+# ----------- Response Model -----------
 
-class User(BaseUser):
-    garage_profile: Optional[GarageProfile] = None
-    vendor_profile: Optional[VendorProfile] = None
-    delivery_profile: Optional[DeliveryProfile] = None
+class UserOut(BaseUser):
+    # Flattened common fields for frontend consumption
+    email: Optional[EmailStr] = None
+    location: Optional[Location] = None
+    addresses: Optional[List[Location]] = None
+    documents: Optional[List[str]] = None
+    kyc_status: Optional[str] = None
+    gstin: Optional[str] = None
+    pan_number: Optional[str] = None
+    business_name: Optional[str] = None
+    garage_name: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    vehicle_number: Optional[str] = None
+    warehouse_assigned: Optional[str] = None
+    kyc_details: Optional[KYCDetails] = None
+    brands_served: Optional[List[str]] = None
+    brands_carried: Optional[List[str]] = None
+    vehicle_types: Optional[List[str]] = None
+    category_focus: Optional[List[str]] = None
 
-class UserInDB(User):
+
+# ----------- Update Schema (PATCH Support) -----------
+
+class UpdateUserModel(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    pin: Optional[str] = None
+
+    business_name: Optional[str] = None
+    business_type: Optional[str] = None
+    garage_name: Optional[str] = None
+    gstin: Optional[str] = None
+    pan_number: Optional[str] = None
+    distributor_size: Optional[str] = None
+    brands_served: Optional[List[str]] = None
+    brands_carried: Optional[List[str]] = None
+    vehicle_types: Optional[List[str]] = None
+    category_focus: Optional[List[str]] = None
+    vehicle_type: Optional[str] = None
+    vehicle_number: Optional[str] = None
+    warehouse_assigned: Optional[str] = None
+    kyc_status: Optional[str] = None
+    kyc_details: Optional[KYCDetails] = None
+    documents: Optional[List[str]] = None
+
+    location: Optional[Location] = None
+    addresses: Optional[List[Location]] = None
+
+    updated_at: Optional[datetime] = None
+
+
+
+# ----------- Database Internal Model -----------
+
+class UserInDB(BaseUser):
     id: Optional[str] = Field(alias="_id")
+
+
+# ----------- Factory to Create Typed User -----------
+
+def create_user_model(data: dict) -> Union[AdminUser, VendorUser, GarageUser, DeliveryUser]:
+    role = data.get("role")
+    if role == "admin":
+        return AdminUser(**data)
+    elif role == "vendor":
+        return VendorUser(**data)
+    elif role == "garage":
+        return GarageUser(**data)
+    elif role == "delivery":
+        return DeliveryUser(**data)
+    else:
+        raise ValueError("Invalid user role")

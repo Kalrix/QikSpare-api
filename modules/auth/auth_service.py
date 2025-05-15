@@ -1,37 +1,77 @@
 from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from utils.jwt_utils import create_access_token
 from bson import ObjectId
+from utils.jwt_utils import create_access_token
+import httpx
+from config import TWO_FACTOR_API_KEY
 
-# MOCKED OTP
-MOCKED_OTP = "123456"
+TWO_FACTOR_URL = "https://2factor.in/API/V1"
+OTP_TEMPLATE_NAME = "QIKSPARE"  # Make sure this is approved on 2Factor
 
+# ---------------------------
+# Send OTP using 2Factor API
+# ---------------------------
 async def request_otp(phone: str, db: AsyncIOMotorDatabase):
-    user = await db.users.find_one({"phone": phone})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    # Normally integrate 2Factor here, for now return mocked
-    return MOCKED_OTP
+    url = f"{TWO_FACTOR_URL}/{TWO_FACTOR_API_KEY}/SMS/{phone}/AUTOGEN3/{OTP_TEMPLATE_NAME}"
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=10.0)
+            data = response.json()
+            if data["Status"] != "Success":
+                raise HTTPException(status_code=400, detail="Failed to send OTP")
+            return {"session_id": data["Details"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OTP request failed: {str(e)}")
 
-async def verify_otp(phone: str, otp: str, db: AsyncIOMotorDatabase):
-    if otp != MOCKED_OTP:
-        raise HTTPException(status_code=400, detail="Invalid OTP")
-    user = await db.users.find_one({"phone": phone})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    token = create_access_token({"user_id": str(user["_id"]), "phone": user["phone"], "role": user["role"]})
-    return token
 
+# -----------------------------
+# Verify OTP with 2Factor API
+# -----------------------------
+async def verify_otp(phone: str, otp: str, session_id: str, db: AsyncIOMotorDatabase):
+    url = f"{TWO_FACTOR_URL}/{TWO_FACTOR_API_KEY}/SMS/VERIFY/{session_id}/{otp}"
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=10.0)
+            data = response.json()
+            if data["Status"] != "Success":
+                raise HTTPException(status_code=400, detail="Invalid OTP")
+
+            user = await db.users.find_one({"phone": phone})
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+
+            token = create_access_token({
+                "user_id": str(user["_id"]),
+                "phone": user["phone"],
+                "role": user["role"]
+            })
+            return {"token": token}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OTP verification failed: {str(e)}")
+
+
+# ------------------------
+# Register New User (App)
+# ------------------------
 async def register_user(data: dict, db: AsyncIOMotorDatabase):
     existing = await db.users.find_one({"phone": data["phone"]})
     if existing:
         raise HTTPException(status_code=400, detail="User already exists")
     result = await db.users.insert_one(data)
-    return str(result.inserted_id)
+    return {"user_id": str(result.inserted_id)}
 
+
+# -------------------------
+# Login with 4-digit PIN
+# -------------------------
 async def login_with_pin(phone: str, pin: str, db: AsyncIOMotorDatabase):
     user = await db.users.find_one({"phone": phone})
     if not user or user.get("pin") != pin:
         raise HTTPException(status_code=401, detail="Invalid phone or PIN")
-    token = create_access_token({"user_id": str(user["_id"]), "phone": phone, "role": user["role"]})
-    return token
+    token = create_access_token({
+        "user_id": str(user["_id"]),
+        "phone": user["phone"],
+        "role": user["role"]
+    })
+    return {"token": token}

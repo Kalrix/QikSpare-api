@@ -7,12 +7,12 @@ router = APIRouter()
 
 @router.post("/request-otp")
 async def send_otp(payload: OTPRequest, db=Depends(get_database)):
-    otp = await request_otp(payload.phone, db)
-    return {"message": "OTP sent", "otp": otp}
+    result = await request_otp(payload.phone, db)
+    return {"message": "OTP sent", "session_id": result["session_id"]}
 
 @router.post("/verify-otp")
 async def verify_user_otp(payload: OTPVerify, db=Depends(get_database)):
-    token = await verify_otp(payload.phone, payload.otp, db)
+    token = await verify_otp(payload.phone, payload.otp, payload.session_id, db)
     return {"token": token}
 
 @router.post("/register-user")
