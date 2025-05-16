@@ -9,20 +9,21 @@ from modules.admin.admin_routes import router as admin_router
 
 app = FastAPI(title="QikSpare Backend", version="1.0.0")
 
-# ✅ CORS for local + production frontend
+# ✅ CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In prod, restrict to frontend domain
+    allow_origins=["*"],  # 🔐 In production, restrict to frontend domain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ✅ Connect to MongoDB at startup
 @app.on_event("startup")
 async def startup_event():
     await connect_to_mongo(app)
 
-# ✅ Mount routers with clean prefixes
+# ✅ API Routes
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 app.include_router(user_router, prefix="/api/admin/users", tags=["Users"])
 app.include_router(profile_router, prefix="/api/profile", tags=["Profile"])
