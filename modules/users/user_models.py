@@ -2,7 +2,6 @@ from datetime import datetime
 from typing import Optional, List, Literal, Union
 from pydantic import BaseModel, EmailStr, Field
 
-
 # ----------- Shared Sub-Models -----------
 
 class Location(BaseModel):
@@ -13,7 +12,6 @@ class Location(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
 
-
 class KYCDetails(BaseModel):
     driving_license: Optional[str] = None
     rc_book: Optional[str] = None
@@ -21,8 +19,7 @@ class KYCDetails(BaseModel):
     insurance: Optional[str] = None
     documents: List[str] = []
 
-
-# ----------- Base User Model -----------
+# ----------- Base User -----------
 
 class BaseUser(BaseModel):
     full_name: str
@@ -40,12 +37,10 @@ class BaseUser(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-
-# ----------- Role Specific Models -----------
+# ----------- Role Specific -----------
 
 class AdminUser(BaseUser):
     pass
-
 
 class VendorUser(BaseUser):
     business_name: Optional[str] = None
@@ -57,30 +52,28 @@ class VendorUser(BaseUser):
     brands_carried: List[str] = []
     category_focus: List[str] = []
 
-    kyc_status: Optional[str] = "optional"
     documents: List[str] = []
+    kyc_status: Optional[str] = "optional"
 
     location: Optional[Location] = None
     addresses: List[Location] = []
-
 
 class GarageUser(BaseUser):
     garage_name: Optional[str] = None
     garage_size: Optional[str] = None
 
+    gstin: Optional[str] = None
+    pan_number: Optional[str] = None
+
     brands_served: List[str] = []
     vehicle_types: List[str] = []
     category_focus: List[str] = []
 
-    gstin: Optional[str] = None
-    pan_number: Optional[str] = None
-
-    kyc_status: Optional[str] = "optional"
     documents: List[str] = []
+    kyc_status: Optional[str] = "optional"
 
     location: Optional[Location] = None
     addresses: List[Location] = []
-
 
 class DeliveryUser(BaseUser):
     vehicle_type: Optional[str] = None
@@ -93,27 +86,34 @@ class DeliveryUser(BaseUser):
 # ----------- Response Model -----------
 
 class UserOut(BaseUser):
-    # Flattened common fields for frontend consumption
+    # Flattened fields from role-specific models
     email: Optional[EmailStr] = None
     location: Optional[Location] = None
     addresses: Optional[List[Location]] = None
+
     documents: Optional[List[str]] = None
     kyc_status: Optional[str] = None
     gstin: Optional[str] = None
     pan_number: Optional[str] = None
+
     business_name: Optional[str] = None
+    business_type: Optional[str] = None
+    distributor_size: Optional[str] = None
+
     garage_name: Optional[str] = None
+    garage_size: Optional[str] = None
+
     vehicle_type: Optional[str] = None
     vehicle_number: Optional[str] = None
     warehouse_assigned: Optional[str] = None
+
     kyc_details: Optional[KYCDetails] = None
     brands_served: Optional[List[str]] = None
     brands_carried: Optional[List[str]] = None
     vehicle_types: Optional[List[str]] = None
     category_focus: Optional[List[str]] = None
 
-
-# ----------- Update Schema (PATCH Support) -----------
+# ----------- Update Schema -----------
 
 class UpdateUserModel(BaseModel):
     full_name: Optional[str] = None
@@ -122,35 +122,37 @@ class UpdateUserModel(BaseModel):
 
     business_name: Optional[str] = None
     business_type: Optional[str] = None
+    distributor_size: Optional[str] = None
+
     garage_name: Optional[str] = None
+    garage_size: Optional[str] = None
+
     gstin: Optional[str] = None
     pan_number: Optional[str] = None
-    distributor_size: Optional[str] = None
+
     brands_served: Optional[List[str]] = None
     brands_carried: Optional[List[str]] = None
     vehicle_types: Optional[List[str]] = None
     category_focus: Optional[List[str]] = None
+
     vehicle_type: Optional[str] = None
     vehicle_number: Optional[str] = None
     warehouse_assigned: Optional[str] = None
+
     kyc_status: Optional[str] = None
-    kyc_details: Optional[KYCDetails] = None
     documents: Optional[List[str]] = None
+    kyc_details: Optional[KYCDetails] = None
 
     location: Optional[Location] = None
     addresses: Optional[List[Location]] = None
-
     updated_at: Optional[datetime] = None
 
-
-
-# ----------- Database Internal Model -----------
+# ----------- Internal DB Model -----------
 
 class UserInDB(BaseUser):
     id: Optional[str] = Field(alias="_id")
 
-
-# ----------- Factory to Create Typed User -----------
+# ----------- Role-based Factory -----------
 
 def create_user_model(data: dict) -> Union[AdminUser, VendorUser, GarageUser, DeliveryUser]:
     role = data.get("role")
