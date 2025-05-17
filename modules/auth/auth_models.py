@@ -8,6 +8,7 @@ class OTPVerify(BaseModel):
     phone: str
     otp: str
     session_id: str  # Required for 2Factor OTP verification
+    role: Literal["garage", "vendor"]  # 👈 Added for auto-register
 
 class PINLogin(BaseModel):
     phone: str

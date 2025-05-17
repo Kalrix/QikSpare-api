@@ -2,11 +2,13 @@ from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from utils.jwt_utils import create_access_token
+from datetime import datetime
 import httpx
 from config import TWO_FACTOR_API_KEY
 
 TWO_FACTOR_URL = "https://2factor.in/API/V1"
 OTP_TEMPLATE_NAME = "QIKSPARE"  # Make sure this is approved on 2Factor
+
 
 # ---------------------------
 # Send OTP using 2Factor API
@@ -25,9 +27,9 @@ async def request_otp(phone: str, db: AsyncIOMotorDatabase):
 
 
 # -----------------------------
-# Verify OTP with 2Factor API
+# Verify OTP + Auto-register
 # -----------------------------
-async def verify_otp(phone: str, otp: str, session_id: str, db: AsyncIOMotorDatabase):
+async def verify_otp(phone: str, otp: str, session_id: str, role: str, db: AsyncIOMotorDatabase):
     url = f"{TWO_FACTOR_URL}/{TWO_FACTOR_API_KEY}/SMS/VERIFY/{session_id}/{otp}"
     try:
         async with httpx.AsyncClient() as client:
@@ -38,7 +40,19 @@ async def verify_otp(phone: str, otp: str, session_id: str, db: AsyncIOMotorData
 
             user = await db.users.find_one({"phone": phone})
             if not user:
-                raise HTTPException(status_code=404, detail="User not found")
+                # Auto-create user with provided role (garage or vendor)
+                new_user = {
+                    "phone": phone,
+                    "full_name": "New User",
+                    "role": role,
+                    "pin": None,
+                    "referral_count": 0,
+                    "referral_users": [],
+                    "created_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow(),
+                }
+                result = await db.users.insert_one(new_user)
+                user = await db.users.find_one({"_id": result.inserted_id})
 
             token = create_access_token({
                 "user_id": str(user["_id"]),
@@ -52,7 +66,7 @@ async def verify_otp(phone: str, otp: str, session_id: str, db: AsyncIOMotorData
 
 
 # ------------------------
-# Register New User (App)
+# Register New User (Manual Flow)
 # ------------------------
 async def register_user(data: dict, db: AsyncIOMotorDatabase):
     existing = await db.users.find_one({"phone": data["phone"]})
@@ -69,6 +83,7 @@ async def login_with_pin(phone: str, pin: str, db: AsyncIOMotorDatabase):
     user = await db.users.find_one({"phone": phone})
     if not user or user.get("pin") != pin:
         raise HTTPException(status_code=401, detail="Invalid phone or PIN")
+
     token = create_access_token({
         "user_id": str(user["_id"]),
         "phone": user["phone"],
