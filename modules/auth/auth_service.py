@@ -7,8 +7,7 @@ import httpx
 from config import TWO_FACTOR_API_KEY
 
 TWO_FACTOR_URL = "https://2factor.in/API/V1"
-OTP_TEMPLATE_NAME = "QIKSPARE"  # Make sure this is approved on 2Factor
-
+OTP_TEMPLATE_NAME = "QIKSPARE"  # Ensure it's approved
 
 # ---------------------------
 # Send OTP using 2Factor API
@@ -90,3 +89,21 @@ async def login_with_pin(phone: str, pin: str, db: AsyncIOMotorDatabase):
         "role": user["role"]
     })
     return {"token": token}
+
+
+# ✅ NEW FUNCTION: Update PIN for existing user
+async def update_user_pin(phone: str, pin: str, db: AsyncIOMotorDatabase):
+    user = await db.users.find_one({"phone": phone})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await db.users.update_one(
+        {"phone": phone},
+        {
+            "$set": {
+                "pin": pin,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+    return {"message": "PIN updated successfully"}
